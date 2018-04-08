@@ -62,34 +62,36 @@ class RenderAppleseed(bpy.types.RenderEngine):
 
         self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
 
-        if asr_scene_props.diffuse_aov:
-            self.register_pass(scene, renderlayer, "diffuse", 4, "RGBA", 'COLOR')
-        if asr_scene_props.direct_diffuse_aov:
-            self.register_pass(scene, renderlayer, "direct_diffuse", 4, "RGBA", 'COLOR')
-        if asr_scene_props.indirect_diffuse_aov:
-            self.register_pass(scene, renderlayer, "indirect_diffuse", 4, "RGBA", 'COLOR')
-        if asr_scene_props.glossy_aov:
-            self.register_pass(scene, renderlayer, "glossy", 4, "RGBA", 'COLOR')
-        if asr_scene_props.direct_glossy_aov:
-            self.register_pass(scene, renderlayer, "direct_glossy", 4, "RGBA", 'COLOR')
-        if asr_scene_props.indirect_glossy_aov:
-            self.register_pass(scene, renderlayer, "indirect_glossy", 4, "RGBA", 'COLOR')
+        if not self.is_preview:
+            if asr_scene_props.diffuse_aov:
+                self.register_pass(scene, renderlayer, "diffuse", 4, "RGBA", 'COLOR')
+            if asr_scene_props.direct_diffuse_aov:
+                self.register_pass(scene, renderlayer, "direct_diffuse", 4, "RGBA", 'COLOR')
+            if asr_scene_props.indirect_diffuse_aov:
+                self.register_pass(scene, renderlayer, "indirect_diffuse", 4, "RGBA", 'COLOR')
+            if asr_scene_props.glossy_aov:
+                self.register_pass(scene, renderlayer, "glossy", 4, "RGBA", 'COLOR')
+            if asr_scene_props.direct_glossy_aov:
+                self.register_pass(scene, renderlayer, "direct_glossy", 4, "RGBA", 'COLOR')
+            if asr_scene_props.indirect_glossy_aov:
+                self.register_pass(scene, renderlayer, "indirect_glossy", 4, "RGBA", 'COLOR')
 
     def render(self, scene):
         asr_scene_props = scene.appleseed
 
-        # if asr_scene_props.diffuse_aov:
-        self.add_pass("diffuse", 4, "RGBA")
-        if asr_scene_props.direct_diffuse_aov:
-            self.add_pass("direct_diffuse", 4, "RGBA")
-        if asr_scene_props.indirect_diffuse_aov:
-            self.add_pass("indirect_diffuse", 4, "RGBA")
-        if asr_scene_props.glossy_aov:
-            self.add_pass("glossy", 4, "RGBA")
-        if asr_scene_props.direct_glossy_aov:
-            self.add_pass("direct_glossy", 4, "RGBA")
-        if asr_scene_props.indirect_glossy_aov:
-            self.add_pass("indirect_glossy", 4, "RGBA")
+        if not self.is_preview:
+            if asr_scene_props.diffuse_aov:
+                self.add_pass("diffuse", 4, "RGBA")
+            if asr_scene_props.direct_diffuse_aov:
+                self.add_pass("direct_diffuse", 4, "RGBA")
+            if asr_scene_props.indirect_diffuse_aov:
+                self.add_pass("indirect_diffuse", 4, "RGBA")
+            if asr_scene_props.glossy_aov:
+                self.add_pass("glossy", 4, "RGBA")
+            if asr_scene_props.direct_glossy_aov:
+                self.add_pass("direct_glossy", 4, "RGBA")
+            if asr_scene_props.indirect_glossy_aov:
+                self.add_pass("indirect_glossy", 4, "RGBA")
 
         with RenderAppleseed.render_lock:
             if self.is_preview:
@@ -259,6 +261,8 @@ class RenderAppleseed(bpy.types.RenderEngine):
         self.update_stats("appleseed Rendering: Loading Scene", "Time Remaining: Unknown")
         self.time_start = time.time()
         self.aovs = {}
+        self.aov_count = 0
+        self.render_results = {}
 
         # Update while rendering.
         while not self.test_break():
@@ -450,8 +454,8 @@ class RenderAppleseed(bpy.types.RenderEngine):
         - AOV count with a value >= 1
         """
         tiles_header = struct.unpack("I", os.read(process.stdout.fileno(), 1 * 4))
-        aov_count = tiles_header[0]
-        print("AOV Count={0}".format(aov_count))
+        self.aov_count = tiles_header[0]
+        print("AOV Count={0}".format(self.aov_count))
 
         return True
 
@@ -545,13 +549,22 @@ class RenderAppleseed(bpy.types.RenderEngine):
         y0 = max_y - iy1    # bottom
 
         # Update image.
-        result = self.begin_result(x0, y0, take_x, take_y)
+        # Beauty AOV is always the first pass sent.
         if tile_aov_index == 0:
+            result = self.begin_result(x0, y0, take_x, take_y)
+            self.render_results[(x0, y0, take_x, take_y)] = result
             layer = result.layers[0].passes["Combined"]
         else:
+            result = self.render_results[(x0, y0, take_x, take_y)]
             layer = result.layers[0].passes["diffuse"]
+
         layer.rect = pix
-        self.end_result(result)
+
+        if (tile_aov_index == (self.aov_count - 1)) :
+            self.end_result(result)
+        else:
+            self.update_result(result)
+
 
         # Update progress bar.
         self.rendered_pixels += take_x * take_y
