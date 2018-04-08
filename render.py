@@ -262,7 +262,7 @@ class RenderAppleseed(bpy.types.RenderEngine):
         self.time_start = time.time()
         self.aovs = {}
         self.aov_count = 0
-        self.render_results = {}
+        self.render_result = None
 
         # Update while rendering.
         while not self.test_break():
@@ -552,10 +552,10 @@ class RenderAppleseed(bpy.types.RenderEngine):
         # Beauty AOV is always the first pass sent.
         if tile_aov_index == 0:
             result = self.begin_result(x0, y0, take_x, take_y)
-            self.render_results[(x0, y0, take_x, take_y)] = result
+            self.render_result = result
             layer = result.layers[0].passes["Combined"]
         else:
-            result = self.render_results[(x0, y0, take_x, take_y)]
+            result = self.render_result
             layer = result.layers[0].passes["diffuse"]
 
         layer.rect = pix
