@@ -2165,6 +2165,13 @@ class Writer(object):
         self.__emit_parameter("tile_size", "{0} {1}".format(scene.appleseed.tile_width, scene.appleseed.tile_height))
         self.__emit_parameter("filter", scene.appleseed.pixel_filter)
         self.__emit_parameter("filter_size", scene.appleseed.pixel_filter_size)
+        self.__emit_line('<aovs>')
+        self.__indent()
+        # self.__emit_line('<aov model="depth_aov" />')
+        if scene.appleseed.enable_aovs:
+            self.__emit_aovs(scene)
+        self.__unindent()
+        self.__emit_line('</aovs>')
         if scene.appleseed.enable_render_stamp:
             self.__emit_parameter("enable_render_stamp", "true")
             self.__emit_parameter("render_stamp_format", scene.appleseed.render_stamp)
@@ -2178,6 +2185,26 @@ class Writer(object):
             min_x, min_y, max_x, max_y = self.__get_border_limits(scene, width, height)
             self.__emit_parameter("crop_window", "{0} {1} {2} {3}".format(min_x, min_y, max_x, max_y))
         self.__close_element("frame")
+
+    def __emit_aovs(self, scene):
+        asr_scene_props = scene.appleseed
+
+        if asr_scene_props.diffuse_aov:
+            self.__emit_line('<aov model="diffuse_aov" />')
+        if asr_scene_props.direct_diffuse_aov:
+            self.__emit_line('<aov model="direct_diffuse_aov" />')
+        if asr_scene_props.indirect_diffuse_aov:
+            self.__emit_line('<aov model="indirect_diffuse_aov" />')
+        if asr_scene_props.glossy_aov:
+            self.__emit_line('<aov model="glossy_aov" />')
+        if asr_scene_props.direct_glossy_aov:
+            self.__emit_line('<aov model="direct_glossy_aov" />')
+        if asr_scene_props.indirect_glossy_aov:
+            self.__emit_line('<aov model="indirect_glossy_aov" />')
+        if asr_scene_props.normal_aov:
+            self.__emit_line('<aov model="normal_aov" />')
+        if asr_scene_props.uv_aov:
+            self.__emit_line('<aov model="uv_aov" />')
 
     def __get_frame_resolution(self, render):
         scale = render.resolution_percentage / 100.0

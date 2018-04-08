@@ -57,7 +57,40 @@ class RenderAppleseed(bpy.types.RenderEngine):
     def update(self, data, scene):
         pass
 
+    def update_render_passes(self, scene=None, renderlayer=None):
+        asr_scene_props = scene.appleseed
+
+        self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
+
+        if asr_scene_props.diffuse_aov:
+            self.register_pass(scene, renderlayer, "diffuse", 4, "RGBA", 'COLOR')
+        if asr_scene_props.direct_diffuse_aov:
+            self.register_pass(scene, renderlayer, "direct_diffuse", 4, "RGBA", 'COLOR')
+        if asr_scene_props.indirect_diffuse_aov:
+            self.register_pass(scene, renderlayer, "indirect_diffuse", 4, "RGBA", 'COLOR')
+        if asr_scene_props.glossy_aov:
+            self.register_pass(scene, renderlayer, "glossy", 4, "RGBA", 'COLOR')
+        if asr_scene_props.direct_glossy_aov:
+            self.register_pass(scene, renderlayer, "direct_glossy", 4, "RGBA", 'COLOR')
+        if asr_scene_props.indirect_glossy_aov:
+            self.register_pass(scene, renderlayer, "indirect_glossy", 4, "RGBA", 'COLOR')
+
     def render(self, scene):
+        asr_scene_props = scene.appleseed
+
+        # if asr_scene_props.diffuse_aov:
+        self.add_pass("diffuse", 4, "RGBA")
+        if asr_scene_props.direct_diffuse_aov:
+            self.add_pass("direct_diffuse", 4, "RGBA")
+        if asr_scene_props.indirect_diffuse_aov:
+            self.add_pass("indirect_diffuse", 4, "RGBA")
+        if asr_scene_props.glossy_aov:
+            self.add_pass("glossy", 4, "RGBA")
+        if asr_scene_props.direct_glossy_aov:
+            self.add_pass("direct_glossy", 4, "RGBA")
+        if asr_scene_props.indirect_glossy_aov:
+            self.add_pass("indirect_glossy", 4, "RGBA")
+
         with RenderAppleseed.render_lock:
             if self.is_preview:
                 if not bpy.app.background:
@@ -225,6 +258,7 @@ class RenderAppleseed(bpy.types.RenderEngine):
 
         self.update_stats("appleseed Rendering: Loading Scene", "Time Remaining: Unknown")
         self.time_start = time.time()
+        self.aovs = {}
 
         # Update while rendering.
         while not self.test_break():
@@ -410,19 +444,20 @@ class RenderAppleseed(bpy.types.RenderEngine):
 
     def __process_tiles_header(self, process):
         """Read and decode tiles header.
-        
+
         Use Protocol v2.
         Contains: 
         - AOV count with a value >= 1
         """
         tiles_header = struct.unpack("I", os.read(process.stdout.fileno(), 1 * 4))
         aov_count = tiles_header[0]
+        print("AOV Count={0}".format(aov_count))
 
         return True
 
     def __process_plane_header(self, process):
         """Read and decode AOV definition.
-        
+
         Use Protocol v2.
         Contains:
         - Index
@@ -432,16 +467,16 @@ class RenderAppleseed(bpy.types.RenderEngine):
         """
         aov_header = struct.unpack("III", os.read(process.stdout.fileno(), 3 * 4))
         aov_index = aov_header[0]
+        print("AOV Index={0}".format(aov_index))
         aov_name_len = aov_header[1]
         aov_nc = aov_header[2]
-
-        aov_name = os.read(process.stdout.fileno(), aov_name_len)
+        self.aovs[aov_index] = "{0}".format(os.read(process.stdout.fileno(), aov_name_len).decode("utf-8"))
 
         return True
 
     def __process_plane_data_chunk(self, process, min_x, min_y, max_x, max_y):
         """Read and decode plane header and content.
-        
+
         Protocol v2
         Contains:
         - AOV index
@@ -454,6 +489,8 @@ class RenderAppleseed(bpy.types.RenderEngine):
         """
         tile_header = struct.unpack("IIIIII", os.read(process.stdout.fileno(), 6 * 4))
         tile_aov_index = tile_header[0]
+        print(tile_aov_index)
+        print(self.aovs[tile_aov_index])
         tile_x = tile_header[1]
         tile_y = tile_header[2]
         tile_w = tile_header[3]
@@ -461,8 +498,8 @@ class RenderAppleseed(bpy.types.RenderEngine):
         tile_c = tile_header[5]
 
         # We process only the beauty AOV.
-        if tile_aov_index != 0:
-            return True
+        # if tile_aov_index != 0:
+        #     return True
 
         # Read tile data.
         tile_size = tile_w * tile_h * tile_c * 4
@@ -509,7 +546,10 @@ class RenderAppleseed(bpy.types.RenderEngine):
 
         # Update image.
         result = self.begin_result(x0, y0, take_x, take_y)
-        layer = result.layers[0].passes[0]
+        if tile_aov_index == 0:
+            layer = result.layers[0].passes["Combined"]
+        else:
+            layer = result.layers[0].passes["diffuse"]
         layer.rect = pix
         self.end_result(result)
 
